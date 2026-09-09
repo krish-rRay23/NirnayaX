@@ -1,0 +1,64 @@
+name: NirnayaX CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  lint-and-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -e ".[ml,retrieval,api,dev]"
+
+      - name: Run Ruff Linter
+        run: ruff check .
+
+      - name: Run Mypy Type Checker
+        run: mypy src tests
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -e ".[ml,retrieval,api,dev]"
+
+      - name: Run Pytest Test Suite
+        run: pytest -v
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t nirnayax:latest .
+
+      - name: Verify Docker Container Smoke Test
+        run: |
+          docker run -d --name nirnayax-test -p 8000:8000 nirnayax:latest
+          sleep 5
+          curl --fail http://localhost:8000/healthz || exit 1
+          docker stop nirnayax-test

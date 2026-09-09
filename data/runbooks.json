@@ -1,0 +1,893 @@
+[
+  {
+    "runbook_id": "RB-NETWORK-001",
+    "title": "Diagnose elevated latency and packet loss",
+    "category": "NETWORK",
+    "subcategory": "LATENCY_PACKET_LOSS",
+    "summary": "Triage and mitigate packet loss or latency on a network element affecting traffic.",
+    "symptoms": [
+      "Monitoring alerts for packet loss above threshold",
+      "Increased RTT/jitter on links",
+      "Customer reports of slow or dropping connections"
+    ],
+    "steps": [
+      {
+        "order": 1,
+        "action": "Confirm scope: identify the affected element, region and interfaces from the alert and NMS dashboards.",
+        "expected_signal": "Impacted device/interfaces identified"
+      },
+      {
+        "order": 2,
+        "action": "Check interface error/discard counters and utilization on the affected links.",
+        "expected_signal": "Errored or saturated interface located"
+      },
+      {
+        "order": 3,
+        "action": "Run path diagnostics (ping/traceroute/MTR) from probes to isolate the lossy hop.",
+        "expected_signal": "Lossy hop or congested segment identified"
+      },
+      {
+        "order": 4,
+        "action": "If a single link is faulty, shift traffic to a redundant path or drain the link.",
+        "expected_signal": "Loss returns to baseline after reroute"
+      },
+      {
+        "order": 5,
+        "action": "If congestion is the cause, apply QoS/traffic-engineering changes or raise a capacity request.",
+        "expected_signal": null
+      },
+      {
+        "order": 6,
+        "action": "Escalate to network engineering if loss persists after mitigation.",
+        "expected_signal": null
+      }
+    ],
+    "escalation_team": "NOC-Network",
+    "severity_hint": "SEV2",
+    "estimated_resolution_minutes": 45,
+    "tags": [
+      "network",
+      "latency",
+      "packet-loss"
+    ],
+    "version": "1.0.0",
+    "last_reviewed": "2026-07-15",
+    "related_runbook_ids": [
+      "RB-NETWORK-002",
+      "RB-NETWORK-004"
+    ]
+  },
+  {
+    "runbook_id": "RB-NETWORK-002",
+    "title": "Restore a downed link or circuit",
+    "category": "NETWORK",
+    "subcategory": "LINK_DOWN",
+    "summary": "Respond to one or more network interfaces or circuits reporting loss of carrier.",
+    "symptoms": [
+      "Interface DOWN / loss-of-carrier alarms",
+      "Loss of reachability to a site or segment",
+      "Redundant path carrying full load"
+    ],
+    "steps": [
+      {
+        "order": 1,
+        "action": "Identify the down interfaces and whether redundancy is still protecting traffic.",
+        "expected_signal": "Redundancy status known"
+      },
+      {
+        "order": 2,
+        "action": "Verify physical layer: SFP/optic light levels, cabling and patch status.",
+        "expected_signal": "Physical fault confirmed or excluded"
+      },
+      {
+        "order": 3,
+        "action": "Check for planned maintenance or carrier outages on the affected circuit.",
+        "expected_signal": "Maintenance/carrier status confirmed"
+      },
+      {
+        "order": 4,
+        "action": "Attempt interface reset/bounce if safe; confirm the link re-establishes.",
+        "expected_signal": "Link returns UP"
+      },
+      {
+        "order": 5,
+        "action": "If a carrier circuit is down, raise a ticket with the provider and dispatch field engineering.",
+        "expected_signal": null
+      }
+    ],
+    "escalation_team": "NOC-Network",
+    "severity_hint": "SEV1",
+    "estimated_resolution_minutes": 90,
+    "tags": [
+      "network",
+      "link",
+      "outage"
+    ],
+    "version": "1.0.0",
+    "last_reviewed": "2026-07-15",
+    "related_runbook_ids": [
+      "RB-NETWORK-001"
+    ]
+  },
+  {
+    "runbook_id": "RB-NETWORK-003",
+    "title": "Resolve DNS resolution failures",
+    "category": "NETWORK",
+    "subcategory": "DNS_RESOLUTION",
+    "summary": "Diagnose SERVFAIL or slow DNS responses impacting service discovery.",
+    "symptoms": [
+      "Elevated SERVFAIL / NXDOMAIN rates",
+      "High query latency",
+      "Downstream services unable to resolve endpoints"
+    ],
+    "steps": [
+      {
+        "order": 1,
+        "action": "Confirm which resolver(s) and zones are failing from monitoring and query logs.",
+        "expected_signal": "Failing resolver/zone identified"
+      },
+      {
+        "order": 2,
+        "action": "Test resolution directly (dig/nslookup) against the affected and a healthy resolver.",
+        "expected_signal": "Failure reproduced"
+      },
+      {
+        "order": 3,
+        "action": "Check resolver health: CPU, cache size, upstream forwarders and recent config/zone changes.",
+        "expected_signal": "Root cause candidate found"
+      },
+      {
+        "order": 4,
+        "action": "Fail over to a healthy resolver or roll back the offending change.",
+        "expected_signal": "Resolution success rate recovers"
+      },
+      {
+        "order": 5,
+        "action": "Flush poisoned cache entries if stale/incorrect records are served.",
+        "expected_signal": null
+      }
+    ],
+    "escalation_team": "NOC-Network",
+    "severity_hint": "SEV2",
+    "estimated_resolution_minutes": 40,
+    "tags": [
+      "network",
+      "dns"
+    ],
+    "version": "1.0.0",
+    "last_reviewed": "2026-07-15",
+    "related_runbook_ids": []
+  },
+  {
+    "runbook_id": "RB-NETWORK-004",
+    "title": "Stabilize flapping BGP sessions",
+    "category": "NETWORK",
+    "subcategory": "BGP_ROUTING",
+    "summary": "Address BGP session instability and route withdrawals affecting reachability.",
+    "symptoms": [
+      "BGP neighbor state flapping",
+      "Large numbers of routes withdrawn/announced",
+      "Intermittent reachability to peered networks"
+    ],
+    "steps": [
+      {
+        "order": 1,
+        "action": "Identify the flapping neighbors and the peer/transit they connect to.",
+        "expected_signal": "Affected sessions identified"
+      },
+      {
+        "order": 2,
+        "action": "Correlate with link errors or latency on the underlying interfaces.",
+        "expected_signal": "Underlying transport checked"
+      },
+      {
+        "order": 3,
+        "action": "Review recent policy/prefix-list/route-map changes on the affected routers.",
+        "expected_signal": "Recent changes reviewed"
+      },
+      {
+        "order": 4,
+        "action": "Apply session dampening or administratively reset the unstable session in a controlled window.",
+        "expected_signal": "Session stabilizes"
+      },
+      {
+        "order": 5,
+        "action": "Coordinate with the peer's NOC if the instability originates upstream.",
+        "expected_signal": null
+      }
+    ],
+    "escalation_team": "NOC-Network",
+    "severity_hint": "SEV2",
+    "estimated_resolution_minutes": 60,
+    "tags": [
+      "network",
+      "bgp",
+      "routing"
+    ],
+    "version": "1.0.0",
+    "last_reviewed": "2026-07-15",
+    "related_runbook_ids": [
+      "RB-NETWORK-001"
+    ]
+  },
+  {
+    "runbook_id": "RB-APPLICATION_DB-001",
+    "title": "Relieve database connection pool exhaustion",
+    "category": "APPLICATION_DB",
+    "subcategory": "CONNECTION_POOL_EXHAUSTION",
+    "summary": "Restore service when an application's DB connection pool is saturated.",
+    "symptoms": [
+      "Pool-timeout / 'cannot get connection' errors",
+      "High connection-checkout wait times",
+      "Rising request error rate with healthy DB CPU"
+    ],
+    "steps": [
+      {
+        "order": 1,
+        "action": "Confirm pool utilization and checkout wait times for the affected service.",
+        "expected_signal": "Pool saturation confirmed"
+      },
+      {
+        "order": 2,
+        "action": "Identify connection leaks or long-running transactions holding connections.",
+        "expected_signal": "Leaking/long queries identified"
+      },
+      {
+        "order": 3,
+        "action": "Check the database for the number of active vs. idle-in-transaction sessions.",
+        "expected_signal": "DB session mix reviewed"
+      },
+      {
+        "order": 4,
+        "action": "Terminate stuck sessions and, if safe, restart the offending app instances to reset the pool.",
+        "expected_signal": "Pool utilization drops"
+      },
+      {
+        "order": 5,
+        "action": "Tune pool size / timeouts or scale out the service; file a follow-up for the leak.",
+        "expected_signal": null
+      }
+    ],
+    "escalation_team": "DBA-OnCall",
+    "severity_hint": "SEV2",
+    "estimated_resolution_minutes": 40,
+    "tags": [
+      "application",
+      "database",
+      "connection-pool"
+    ],
+    "version": "1.0.0",
+    "last_reviewed": "2026-07-15",
+    "related_runbook_ids": [
+      "RB-APPLICATION_DB-004",
+      "RB-APPLICATION_DB-003"
+    ]
+  },
+  {
+    "runbook_id": "RB-APPLICATION_DB-002",
+    "title": "Reduce database replication lag",
+    "category": "APPLICATION_DB",
+    "subcategory": "REPLICATION_LAG",
+    "summary": "Bring a lagging read replica back within acceptable bounds.",
+    "symptoms": [
+      "Replica lag above SLO",
+      "Growing WAL/redo backlog",
+      "Stale reads reported by consumers"
+    ],
+    "steps": [
+      {
+        "order": 1,
+        "action": "Confirm the lag magnitude and which replica(s) are affected.",
+        "expected_signal": "Lagging replicas identified"
+      },
+      {
+        "order": 2,
+        "action": "Check replica resource saturation (CPU, disk I/O) and network to the primary.",
+        "expected_signal": "Bottleneck located"
+      },
+      {
+        "order": 3,
+        "action": "Look for long-running queries or locks on the replica blocking apply.",
+        "expected_signal": "Blocking activity found"
+      },
+      {
+        "order": 4,
+        "action": "Pause heavy read workloads or add apply resources until the backlog drains.",
+        "expected_signal": "Lag trends downward"
+      },
+      {
+        "order": 5,
+        "action": "If lag is unrecoverable, rebuild/reseed the replica from a fresh snapshot.",
+        "expected_signal": null
+      }
+    ],
+    "escalation_team": "DBA-OnCall",
+    "severity_hint": "SEV3",
+    "estimated_resolution_minutes": 60,
+    "tags": [
+      "application",
+      "database",
+      "replication"
+    ],
+    "version": "1.0.0",
+    "last_reviewed": "2026-07-15",
+    "related_runbook_ids": [
+      "RB-APPLICATION_DB-005"
+    ]
+  },
+  {
+    "runbook_id": "RB-APPLICATION_DB-003",
+    "title": "Break a database deadlock storm",
+    "category": "APPLICATION_DB",
+    "subcategory": "DEADLOCK",
+    "summary": "Reduce deadlocks and aborted transactions degrading an application.",
+    "symptoms": [
+      "Deadlock-victim errors in application logs",
+      "Elevated transaction rollback rate",
+      "Long lock-wait times"
+    ],
+    "steps": [
+      {
+        "order": 1,
+        "action": "Confirm the deadlock rate and capture deadlock graphs from the DB.",
+        "expected_signal": "Deadlock graph captured"
+      },
+      {
+        "order": 2,
+        "action": "Identify the conflicting statements and the tables/indexes involved.",
+        "expected_signal": "Conflicting queries identified"
+      },
+      {
+        "order": 3,
+        "action": "Terminate the highest-impact blocking transactions to clear the immediate storm.",
+        "expected_signal": "Deadlock rate drops"
+      },
+      {
+        "order": 4,
+        "action": "Advise the app team to align lock ordering / reduce transaction scope.",
+        "expected_signal": null
+      },
+      {
+        "order": 5,
+        "action": "Add or adjust indexes to shorten locks; schedule a code fix follow-up.",
+        "expected_signal": null
+      }
+    ],
+    "escalation_team": "DBA-OnCall",
+    "severity_hint": "SEV2",
+    "estimated_resolution_minutes": 45,
+    "tags": [
+      "application",
+      "database",
+      "deadlock",
+      "concurrency"
+    ],
+    "version": "1.0.0",
+    "last_reviewed": "2026-07-15",
+    "related_runbook_ids": [
+      "RB-APPLICATION_DB-004",
+      "RB-APPLICATION_DB-001"
+    ]
+  },
+  {
+    "runbook_id": "RB-APPLICATION_DB-004",
+    "title": "Investigate slow database queries",
+    "category": "APPLICATION_DB",
+    "subcategory": "SLOW_QUERY",
+    "summary": "Restore query performance when p99 latency breaches SLO.",
+    "symptoms": [
+      "p99 query latency above SLO",
+      "High share of slow queries",
+      "Elevated DB CPU or I/O"
+    ],
+    "steps": [
+      {
+        "order": 1,
+        "action": "Identify the top slow statements from the slow-query log / performance views.",
+        "expected_signal": "Offending queries identified"
+      },
+      {
+        "order": 2,
+        "action": "Capture and review execution plans for plan regressions or missing indexes.",
+        "expected_signal": "Plan issue confirmed"
+      },
+      {
+        "order": 3,
+        "action": "Check for stale statistics and refresh them where appropriate.",
+        "expected_signal": null
+      },
+      {
+        "order": 4,
+        "action": "Add/adjust indexes or apply query hints; consider caching hot reads.",
+        "expected_signal": "p99 latency recovers"
+      },
+      {
+        "order": 5,
+        "action": "If a recent deploy caused the regression, coordinate a rollback.",
+        "expected_signal": null
+      }
+    ],
+    "escalation_team": "DBA-OnCall",
+    "severity_hint": "SEV3",
+    "estimated_resolution_minutes": 50,
+    "tags": [
+      "application",
+      "database",
+      "slow-query",
+      "performance"
+    ],
+    "version": "1.0.0",
+    "last_reviewed": "2026-07-15",
+    "related_runbook_ids": [
+      "RB-APPLICATION_DB-003",
+      "RB-APPLICATION_DB-001"
+    ]
+  },
+  {
+    "runbook_id": "RB-APPLICATION_DB-005",
+    "title": "Recover low database disk space",
+    "category": "APPLICATION_DB",
+    "subcategory": "DISK_SPACE",
+    "summary": "Prevent write failures when a data volume approaches capacity.",
+    "symptoms": [
+      "Disk usage above critical threshold",
+      "Low free space / inode exhaustion",
+      "Imminent or occurring write failures"
+    ],
+    "steps": [
+      {
+        "order": 1,
+        "action": "Confirm the affected volume and current used/free space and inode usage.",
+        "expected_signal": "Capacity state confirmed"
+      },
+      {
+        "order": 2,
+        "action": "Identify the largest consumers: WAL/redo, logs, temp, bloated tables.",
+        "expected_signal": "Top space consumers identified"
+      },
+      {
+        "order": 3,
+        "action": "Reclaim space safely: rotate/ship logs, archive WAL, purge temp files.",
+        "expected_signal": "Free space recovered"
+      },
+      {
+        "order": 4,
+        "action": "Extend the volume or add storage if reclamation is insufficient.",
+        "expected_signal": "Usage below threshold"
+      },
+      {
+        "order": 5,
+        "action": "Schedule vacuum/compaction and review retention to prevent recurrence.",
+        "expected_signal": null
+      }
+    ],
+    "escalation_team": "DBA-OnCall",
+    "severity_hint": "SEV2",
+    "estimated_resolution_minutes": 35,
+    "tags": [
+      "application",
+      "database",
+      "disk",
+      "capacity"
+    ],
+    "version": "1.0.0",
+    "last_reviewed": "2026-07-15",
+    "related_runbook_ids": [
+      "RB-APPLICATION_DB-002"
+    ]
+  },
+  {
+    "runbook_id": "RB-BILLING_OSS-001",
+    "title": "Recover rating engine errors",
+    "category": "BILLING_OSS",
+    "subcategory": "RATING_ENGINE_ERROR",
+    "summary": "Restore CDR rating and prevent revenue leakage when rating fails.",
+    "symptoms": [
+      "Rising rated-record error rate",
+      "CDRs stuck in an error queue",
+      "Revenue assurance alerts"
+    ],
+    "steps": [
+      {
+        "order": 1,
+        "action": "Quantify the failure: number of errored CDRs and the affected tariff/plan.",
+        "expected_signal": "Failure scope quantified"
+      },
+      {
+        "order": 2,
+        "action": "Inspect rating logs for the dominant error (tariff lookup, config, dependency).",
+        "expected_signal": "Dominant error identified"
+      },
+      {
+        "order": 3,
+        "action": "Validate recent tariff/config changes and roll back if they introduced the fault.",
+        "expected_signal": null
+      },
+      {
+        "order": 4,
+        "action": "Reprocess the errored CDR batch once the fault is corrected.",
+        "expected_signal": "Error queue drains"
+      },
+      {
+        "order": 5,
+        "action": "Reconcile with revenue assurance and file a follow-up for permanent fix.",
+        "expected_signal": null
+      }
+    ],
+    "escalation_team": "Billing-Engineering",
+    "severity_hint": "SEV2",
+    "estimated_resolution_minutes": 75,
+    "tags": [
+      "billing",
+      "oss",
+      "rating",
+      "revenue"
+    ],
+    "version": "1.0.0",
+    "last_reviewed": "2026-07-15",
+    "related_runbook_ids": [
+      "RB-BILLING_OSS-003"
+    ]
+  },
+  {
+    "runbook_id": "RB-BILLING_OSS-002",
+    "title": "Recover a failed invoicing batch",
+    "category": "BILLING_OSS",
+    "subcategory": "INVOICE_GENERATION_FAILURE",
+    "summary": "Complete invoice generation when the billing batch fails or stalls.",
+    "symptoms": [
+      "Invoicing batch failed or delayed",
+      "Accounts missing invoices for the cycle",
+      "Bill-cycle SLA at risk"
+    ],
+    "steps": [
+      {
+        "order": 1,
+        "action": "Confirm how many accounts failed and the batch's current state/checkpoint.",
+        "expected_signal": "Failure count and state known"
+      },
+      {
+        "order": 2,
+        "action": "Review batch logs for the failing stage (data, template, downstream service).",
+        "expected_signal": "Failing stage identified"
+      },
+      {
+        "order": 3,
+        "action": "Fix or bypass the blocking dependency (e.g., document service, storage).",
+        "expected_signal": null
+      },
+      {
+        "order": 4,
+        "action": "Re-run the batch from the last good checkpoint for the failed accounts only.",
+        "expected_signal": "Invoices generated"
+      },
+      {
+        "order": 5,
+        "action": "Verify totals against expected volumes and notify billing operations.",
+        "expected_signal": null
+      }
+    ],
+    "escalation_team": "Billing-Engineering",
+    "severity_hint": "SEV3",
+    "estimated_resolution_minutes": 90,
+    "tags": [
+      "billing",
+      "oss",
+      "invoicing",
+      "batch"
+    ],
+    "version": "1.0.0",
+    "last_reviewed": "2026-07-15",
+    "related_runbook_ids": [
+      "RB-BILLING_OSS-001"
+    ]
+  },
+  {
+    "runbook_id": "RB-BILLING_OSS-003",
+    "title": "Close a mediation feed gap",
+    "category": "BILLING_OSS",
+    "subcategory": "MEDIATION_FEED_GAP",
+    "summary": "Recover missing usage feeds so downstream rating is not starved.",
+    "symptoms": [
+      "Expected mediation files missing",
+      "Feed delayed beyond schedule",
+      "Downstream rating volumes dropping"
+    ],
+    "steps": [
+      {
+        "order": 1,
+        "action": "Identify which feeds/files are missing and the source network elements.",
+        "expected_signal": "Missing feeds identified"
+      },
+      {
+        "order": 2,
+        "action": "Check collector connectivity and credentials to the source systems.",
+        "expected_signal": "Connectivity verified"
+      },
+      {
+        "order": 3,
+        "action": "Re-pull or re-request the missing files from the source or its archive.",
+        "expected_signal": "Files retrieved"
+      },
+      {
+        "order": 4,
+        "action": "Re-ingest the recovered files and confirm record counts reconcile.",
+        "expected_signal": "Counts reconcile"
+      },
+      {
+        "order": 5,
+        "action": "Backfill downstream rating for the recovered window.",
+        "expected_signal": null
+      }
+    ],
+    "escalation_team": "Billing-Engineering",
+    "severity_hint": "SEV3",
+    "estimated_resolution_minutes": 70,
+    "tags": [
+      "billing",
+      "oss",
+      "mediation",
+      "usage"
+    ],
+    "version": "1.0.0",
+    "last_reviewed": "2026-07-15",
+    "related_runbook_ids": [
+      "RB-BILLING_OSS-001"
+    ]
+  },
+  {
+    "runbook_id": "RB-BILLING_OSS-004",
+    "title": "Clear stuck provisioning synchronization",
+    "category": "BILLING_OSS",
+    "subcategory": "PROVISIONING_SYNC_FAILURE",
+    "summary": "Unblock orders that fail to synchronize activations to the network.",
+    "symptoms": [
+      "Orders stuck in a pending/failed state",
+      "Retries exhausted against the network",
+      "New activations not completing"
+    ],
+    "steps": [
+      {
+        "order": 1,
+        "action": "Quantify stuck orders and the step at which synchronization fails.",
+        "expected_signal": "Stuck step identified"
+      },
+      {
+        "order": 2,
+        "action": "Check connectivity/health of the target network provisioning systems.",
+        "expected_signal": "Downstream health verified"
+      },
+      {
+        "order": 3,
+        "action": "Inspect a sample failed order for the specific downstream error.",
+        "expected_signal": "Root error identified"
+      },
+      {
+        "order": 4,
+        "action": "Fix the dependency and replay the stuck orders in controlled batches.",
+        "expected_signal": "Orders complete"
+      },
+      {
+        "order": 5,
+        "action": "Confirm activations on the network and reconcile order status.",
+        "expected_signal": null
+      }
+    ],
+    "escalation_team": "Billing-Engineering",
+    "severity_hint": "SEV2",
+    "estimated_resolution_minutes": 80,
+    "tags": [
+      "billing",
+      "oss",
+      "provisioning",
+      "activation"
+    ],
+    "version": "1.0.0",
+    "last_reviewed": "2026-07-15",
+    "related_runbook_ids": []
+  },
+  {
+    "runbook_id": "RB-HARDWARE_ACCESS-001",
+    "title": "Resolve user account lockouts",
+    "category": "HARDWARE_ACCESS",
+    "subcategory": "ACCOUNT_LOCKOUT",
+    "summary": "Restore access for users locked out and rule out malicious activity.",
+    "symptoms": [
+      "Multiple users reporting lockouts",
+      "Spike in failed login / lockout events",
+      "Authentication denied at the IdP"
+    ],
+    "steps": [
+      {
+        "order": 1,
+        "action": "Confirm the number and scope of locked accounts from the IdP/directory.",
+        "expected_signal": "Lockout scope confirmed"
+      },
+      {
+        "order": 2,
+        "action": "Check for a lockout-policy change, expired credentials, or a sync issue.",
+        "expected_signal": "Cause candidate found"
+      },
+      {
+        "order": 3,
+        "action": "Rule out brute-force/credential-stuffing by reviewing source IPs and patterns.",
+        "expected_signal": "Malicious activity assessed"
+      },
+      {
+        "order": 4,
+        "action": "Unlock verified users and reset credentials where required.",
+        "expected_signal": "Users can authenticate"
+      },
+      {
+        "order": 5,
+        "action": "If an attack is suspected, engage security and enforce additional controls.",
+        "expected_signal": null
+      }
+    ],
+    "escalation_team": "IT-Helpdesk",
+    "severity_hint": "SEV3",
+    "estimated_resolution_minutes": 30,
+    "tags": [
+      "access",
+      "identity",
+      "lockout"
+    ],
+    "version": "1.0.0",
+    "last_reviewed": "2026-07-15",
+    "related_runbook_ids": [
+      "RB-HARDWARE_ACCESS-002"
+    ]
+  },
+  {
+    "runbook_id": "RB-HARDWARE_ACCESS-002",
+    "title": "Restore VPN access",
+    "category": "HARDWARE_ACCESS",
+    "subcategory": "VPN_ACCESS_FAILURE",
+    "summary": "Recover remote-access connectivity when users cannot establish tunnels.",
+    "symptoms": [
+      "Users unable to connect to VPN",
+      "Tunnel-setup / authentication failures",
+      "Remote workforce impacted"
+    ],
+    "steps": [
+      {
+        "order": 1,
+        "action": "Confirm scope: which gateway/region and how many users are affected.",
+        "expected_signal": "Affected gateway identified"
+      },
+      {
+        "order": 2,
+        "action": "Check gateway health, capacity/licensing and certificate validity.",
+        "expected_signal": "Gateway health verified"
+      },
+      {
+        "order": 3,
+        "action": "Verify authentication backend (IdP/RADIUS) reachability and recent changes.",
+        "expected_signal": "Auth path verified"
+      },
+      {
+        "order": 4,
+        "action": "Fail over to a healthy gateway or restore capacity/certificates.",
+        "expected_signal": "Connections succeed"
+      },
+      {
+        "order": 5,
+        "action": "Communicate status to users and monitor reconnection rates.",
+        "expected_signal": null
+      }
+    ],
+    "escalation_team": "IT-Helpdesk",
+    "severity_hint": "SEV2",
+    "estimated_resolution_minutes": 40,
+    "tags": [
+      "access",
+      "vpn",
+      "remote"
+    ],
+    "version": "1.0.0",
+    "last_reviewed": "2026-07-15",
+    "related_runbook_ids": [
+      "RB-HARDWARE_ACCESS-001"
+    ]
+  },
+  {
+    "runbook_id": "RB-HARDWARE_ACCESS-003",
+    "title": "Respond to a server hardware fault",
+    "category": "HARDWARE_ACCESS",
+    "subcategory": "SERVER_HARDWARE_FAULT",
+    "summary": "Handle component failures or thermal alarms on physical servers.",
+    "symptoms": [
+      "Hardware alarm from BMC/iLO/iDRAC",
+      "Failed component (disk, PSU, fan, memory)",
+      "Elevated chassis temperature"
+    ],
+    "steps": [
+      {
+        "order": 1,
+        "action": "Identify the host, failed component(s) and current redundancy state.",
+        "expected_signal": "Failed component identified"
+      },
+      {
+        "order": 2,
+        "action": "Confirm workloads are protected: migrate/evacuate VMs or drain the node.",
+        "expected_signal": "Workloads protected"
+      },
+      {
+        "order": 3,
+        "action": "Check environmental factors (cooling, airflow) for thermal alarms.",
+        "expected_signal": "Environment verified"
+      },
+      {
+        "order": 4,
+        "action": "Raise a hardware replacement request and dispatch datacenter operations.",
+        "expected_signal": "Replacement scheduled"
+      },
+      {
+        "order": 5,
+        "action": "After replacement, validate health and return the node to service.",
+        "expected_signal": null
+      }
+    ],
+    "escalation_team": "DC-Operations",
+    "severity_hint": "SEV2",
+    "estimated_resolution_minutes": 120,
+    "tags": [
+      "hardware",
+      "server",
+      "fault"
+    ],
+    "version": "1.0.0",
+    "last_reviewed": "2026-07-15",
+    "related_runbook_ids": []
+  },
+  {
+    "runbook_id": "RB-HARDWARE_ACCESS-004",
+    "title": "Resolve end-user peripheral failures",
+    "category": "HARDWARE_ACCESS",
+    "subcategory": "PERIPHERAL_FAILURE",
+    "summary": "Restore end-user devices/peripherals reported non-functional at a site.",
+    "symptoms": [
+      "Devices non-functional at a site",
+      "Users unable to complete workflow",
+      "Suspected hardware or driver fault"
+    ],
+    "steps": [
+      {
+        "order": 1,
+        "action": "Confirm the affected devices, site and common factor (model, driver, network).",
+        "expected_signal": "Common factor identified"
+      },
+      {
+        "order": 2,
+        "action": "Attempt standard remediation: power-cycle, reconnect, driver/firmware update.",
+        "expected_signal": "Basic remediation attempted"
+      },
+      {
+        "order": 3,
+        "action": "Check supporting infrastructure (print server, network port, power).",
+        "expected_signal": "Infrastructure checked"
+      },
+      {
+        "order": 4,
+        "action": "Swap failed hardware from spares where remediation fails.",
+        "expected_signal": "Device restored"
+      },
+      {
+        "order": 5,
+        "action": "Log the fault and order replacements to replenish spares.",
+        "expected_signal": null
+      }
+    ],
+    "escalation_team": "IT-Helpdesk",
+    "severity_hint": "SEV4",
+    "estimated_resolution_minutes": 45,
+    "tags": [
+      "hardware",
+      "peripheral",
+      "end-user"
+    ],
+    "version": "1.0.0",
+    "last_reviewed": "2026-07-15",
+    "related_runbook_ids": []
+  }
+]

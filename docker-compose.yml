@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  nirnayax-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nirnayax-api
+    ports:
+      - "8000:8000"
+    environment:
+      - NIRNAYAX_GUARDRAILS_FAIL_CLOSED=true
+      - NIRNAYAX_MIN_CONFIDENCE_THRESHOLD=0.50
+      - JIRA_URL=https://jira.company.internal
+      - JIRA_USER=nirnayax-bot@company.internal
+      - JIRA_PROJECT_KEY=INC
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
