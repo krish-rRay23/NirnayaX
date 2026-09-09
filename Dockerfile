@@ -29,7 +29,7 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 COPY pyproject.toml README.md /app/
 COPY src/ /app/src/
 COPY data/ /app/data/
-COPY models/ /app/models/
+RUN mkdir -p /app/models
 
 ENV PYTHONPATH="/app/src"
 ENV PYTHONUNBUFFERED="1"
