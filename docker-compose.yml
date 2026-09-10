@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   nirnayax-api:
     build:
@@ -19,4 +17,19 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+    restart: unless-stopped
+
+  nirnayax-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nirnayax-ui
+    command: ["streamlit", "run", "src/nirnayax/ui/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+    ports:
+      - "8501:8501"
+    environment:
+      - NIRNAYAX_API_URL=http://nirnayax-api:8000
+    depends_on:
+      nirnayax-api:
+        condition: service_healthy
     restart: unless-stopped

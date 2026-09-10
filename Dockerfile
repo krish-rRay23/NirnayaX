@@ -14,7 +14,7 @@ COPY src/ /app/src/
 
 # Install application with optional extras
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir ".[ml,retrieval,api]"
+    pip install --no-cache-dir ".[ml,retrieval,api,ui]"
 
 # Final runtime image
 FROM python:3.11-slim AS runtime
