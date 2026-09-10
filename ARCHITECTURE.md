@@ -64,7 +64,7 @@ This document provides a detailed technical description of the **NirnayaX** ente
    - Diagnostic observations and remediation tools follow observe-act-verify semantics without non-deterministic side effects.
 
 2. **Clean Boundary Provider Pattern**:
-   - The Jira integration uses `JiraAdapter` protocol. Implementations include `MockJiraAdapter` (in-memory, thread-safe) and `MCPJiraAdapter` (Model Context Protocol tool delegation).
+   - The Jira integration uses `JiraAdapter` protocol. Implementations include `MockJiraAdapter` (in-memory, thread-safe for offline testing) and `MCPJiraAdapter` (connecting directly to the official Atlassian Rovo MCP v2 JSON-RPC endpoint at `https://mcp.atlassian.com/v2/mcp`).
 
 3. **Fail-Closed Safety Design**:
    - Any prompt injection attempt, unallowlisted tool invocation, low-confidence prediction, or prohibited Jira auto-close immediately triggers a fail-closed transition to `ESCALATED`.
