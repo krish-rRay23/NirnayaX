@@ -17,6 +17,60 @@ from nirnayax.api import app as fastapi_app
 
 API_BASE_URL = os.getenv("NIRNAYAX_API_URL", "http://localhost:8000")
 
+CATEGORY_LABELS: dict[str, str] = {
+    "1": "IT Infrastructure (Cat 1)",
+    "2": "Network Operations (Cat 2)",
+    "3": "Billing & Telecom OSS (Cat 3)",
+    "4": "Hardware & Access Control (Cat 4)",
+    "5": "Network Services (Cat 5)",
+    "6": "Software & Applications (Cat 6)",
+    "7": "Database & Storage (Cat 7)",
+    "8": "Security & Identity (Cat 8)",
+    "9": "Cloud & Hosting (Cat 9)",
+    "10": "Security & Compliance (Cat 10)",
+    "11": "Service Desk & Requests (Cat 11)",
+    "APPLICATION_DB": "Application & Database (APPLICATION_DB)",
+    "NETWORK": "Network & Connectivity (NETWORK)",
+    "BILLING_OSS": "Billing & Telecom OSS (BILLING_OSS)",
+    "HARDWARE_ACCESS": "Hardware & Access Control (HARDWARE_ACCESS)",
+}
+
+SUBCATEGORY_LABELS: dict[str, str] = {
+    "CONNECTION_POOL_EXHAUSTION": "Connection Pool Exhaustion",
+    "REPLICATION_LAG": "Replication Lag",
+    "DEADLOCK": "Database Deadlock",
+    "SLOW_QUERY": "Slow Query Performance",
+    "DISK_SPACE": "Disk Space Exhaustion",
+    "LATENCY_PACKET_LOSS": "Latency / Packet Loss",
+    "LINK_DOWN": "Network Link Down",
+    "DNS_RESOLUTION": "DNS Resolution Failure",
+    "BGP_ROUTING": "BGP Routing Anomaly",
+    "RATING_ENGINE_ERROR": "Rating Engine Error",
+    "INVOICE_GENERATION_FAILURE": "Invoice Generation Failure",
+    "MEDIATION_FEED_GAP": "Mediation Feed Gap",
+    "PROVISIONING_SYNC_FAILURE": "Provisioning Sync Failure",
+    "ACCOUNT_LOCKOUT": "Account Lockout",
+    "VPN_ACCESS_FAILURE": "VPN Access Failure",
+    "SERVER_HARDWARE_FAULT": "Server Hardware Fault",
+    "PERIPHERAL_FAILURE": "Peripheral Failure",
+}
+
+
+def format_category_label(cat: Any) -> str:
+    """Format category identifier into a clear operational label."""
+    if cat is None:
+        return "N/A"
+    raw = str(cat).strip()
+    return CATEGORY_LABELS.get(raw, raw.replace("_", " ").title())
+
+
+def format_subcategory_label(sub: Any) -> str:
+    """Format subcategory identifier into a clear operational label."""
+    if sub is None:
+        return "N/A"
+    raw = str(sub).strip()
+    return SUBCATEGORY_LABELS.get(raw, raw.replace("_", " ").title())
+
 
 class NirnayaXAPIClient:
     """HTTP client communicating with NirnayaX REST API service."""
@@ -246,8 +300,10 @@ def render_ui() -> None:
         st.subheader("🎯 ML Triage Predictions")
         if pred:
             pcol1, pcol2, pcol3 = st.columns(3)
-            pcol1.info(f"**Predicted Category**: `{pred.get('category')}`")
-            pcol2.info(f"**Predicted Subcategory**: `{pred.get('subcategory')}`")
+            cat_fmt = format_category_label(pred.get("category"))
+            sub_fmt = format_subcategory_label(pred.get("subcategory"))
+            pcol1.info(f"**Predicted Category**: `{cat_fmt}`")
+            pcol2.info(f"**Predicted Subcategory**: `{sub_fmt}`")
             pcol3.info(f"**Assigned Priority**: `{pred.get('priority')}`")
         else:
             st.warning("No ML prediction available (Guardrail blocked at NEW).")
@@ -299,24 +355,33 @@ def render_ui() -> None:
         decision = res.get("decision")
         if decision:
             d_type = decision.get("decision", "N/A")
-            d_conf = decision.get("confidence_score", 0.0)
+            d_conf = float(decision.get("confidence_score", 0.0))
             d_reason = decision.get("reasoning", "")
             d_action = decision.get("suggested_action")
 
+            conf_pct = f"{d_conf:.1%}"
+            is_high_conf = d_conf >= 0.65
+            conf_wording = "High Confidence" if is_high_conf else "Low Confidence"
+
             if d_type == "REMEDIATE":
                 st.success(
-                    f"**Gate Outcome**: `REMEDIATE` (Confidence Score: `{d_conf:.1%}`)\n"
+                    f"**Gate Outcome**: `REMEDIATE` "
+                    f"({conf_wording}: `{conf_pct}`, Threshold: `65.0%`)\n"
                     f"\n**Reasoning**: {d_reason}\n"
                     f"\n**Suggested Action**: {d_action}"
                 )
             else:
                 st.error(
-                    f"**Gate Outcome**: `ESCALATE` (Confidence Score: `{d_conf:.1%}`)\n"
+                    f"**Gate Outcome**: `ESCALATE` "
+                    f"({conf_wording}: `{conf_pct}`, Threshold: `65.0%`)\n"
                     f"\n**Reasoning**: {d_reason}\n"
                     f"\n**Suggested Action**: {d_action}"
                 )
         else:
-            st.warning("Execution blocked prior to gating evaluation by Guardrail Engine.")
+            st.error(
+                "**Gate Outcome**: `BLOCKED` (Security Guardrail Triggered)\n"
+                "\n**Reasoning**: Execution fail-closed prior to gating evaluation."
+            )
 
         # Human-in-the-loop Approval Actions (AWAITING_APPROVAL)
         if current_status == "AWAITING_APPROVAL":
