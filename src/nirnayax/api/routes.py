@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
-from ..agent import DiagnosisWorkflow, SimulatedEnvironment
-from ..data import build_runbooks, generate_dataset
+from ..agent import DiagnosisWorkflow, SimulatedEnvironment, WorkflowState, WorkflowStatus
+from ..data import build_runbooks, generate_dataset, load_tickets_csv
 from ..domain import Channel
 from ..guardrails import GuardrailEngine
-from ..jira import MockJiraAdapter
+from ..jira import JiraConfig, MCPJiraAdapter, MockJiraAdapter
 from ..ml import TicketDraft, TriageModel, train_triage_model
 from ..retrieval import build_incident_retriever, build_runbook_retriever
 
@@ -23,20 +24,21 @@ _MODEL: TriageModel | None = None
 _RUNBOOK_RETRIEVER: Any = None
 _INCIDENT_RETRIEVER: Any = None
 _WORKFLOW: DiagnosisWorkflow | None = None
-_JIRA_ADAPTER: MockJiraAdapter | None = None
+_JIRA_ADAPTER: Any = None
+_WORKFLOW_STATES: dict[str, WorkflowState] = {}
 
 
-def get_services() -> tuple[TriageModel, Any, Any, DiagnosisWorkflow, MockJiraAdapter]:
+def get_services() -> tuple[TriageModel, Any, Any, DiagnosisWorkflow, Any]:
     """Lazy initialize ML model, RAG retrievers, Jira adapter, and DiagnosisWorkflow."""
     global _MODEL, _RUNBOOK_RETRIEVER, _INCIDENT_RETRIEVER, _WORKFLOW, _JIRA_ADAPTER
 
     if _MODEL is None or _WORKFLOW is None or _JIRA_ADAPTER is None:
         model_path = Path("models/triage.joblib")
-        train_path = Path("data/incidents_train.json")
+        csv_path = Path("data/all_tickets.csv")
 
-        if train_path.exists():
-            from ..data import load_dataset
-            dataset = load_dataset(train_path)
+        dataset: Any = None
+        if csv_path.exists():
+            dataset = load_tickets_csv(csv_path)
         else:
             dataset = generate_dataset(300, seed=42)
 
@@ -50,8 +52,17 @@ def get_services() -> tuple[TriageModel, Any, Any, DiagnosisWorkflow, MockJiraAd
 
         runbooks = build_runbooks()
         _RUNBOOK_RETRIEVER = build_runbook_retriever(runbooks)
-        _INCIDENT_RETRIEVER = build_incident_retriever(dataset.incidents)
-        _JIRA_ADAPTER = MockJiraAdapter()
+        _INCIDENT_RETRIEVER = build_incident_retriever(dataset.incidents[:1000])
+
+        jira_config = JiraConfig.from_env()
+        use_mcp = (
+            os.getenv("JIRA_USE_MCP", "false").lower() in ("true", "1", "yes")
+            or "JIRA_MCP_ENDPOINT" in os.environ
+        )
+        if use_mcp:
+            _JIRA_ADAPTER = MCPJiraAdapter(config=jira_config)
+        else:
+            _JIRA_ADAPTER = MockJiraAdapter(config=jira_config)
 
         env = SimulatedEnvironment(
             {
@@ -61,6 +72,7 @@ def get_services() -> tuple[TriageModel, Any, Any, DiagnosisWorkflow, MockJiraAd
             }
         )
 
+        min_conf = float(os.getenv("NIRNAYAX_MIN_CONFIDENCE_THRESHOLD", "0.20"))
         _WORKFLOW = DiagnosisWorkflow(
             model=_MODEL,
             runbook_retriever=_RUNBOOK_RETRIEVER,
@@ -68,8 +80,12 @@ def get_services() -> tuple[TriageModel, Any, Any, DiagnosisWorkflow, MockJiraAd
             env=env,
             jira_adapter=_JIRA_ADAPTER,
             guardrail_engine=GuardrailEngine(),
+            min_confidence_threshold=min_conf,
         )
 
+    _WORKFLOW.min_confidence_threshold = float(
+        os.getenv("NIRNAYAX_MIN_CONFIDENCE_THRESHOLD", "0.20")
+    )
     return _MODEL, _RUNBOOK_RETRIEVER, _INCIDENT_RETRIEVER, _WORKFLOW, _JIRA_ADAPTER
 
 
@@ -206,9 +222,13 @@ def api_diagnose(req: TicketDraftRequest) -> dict[str, Any]:
     )
 
     state = workflow.run(draft)
+    if state.jira_issue_key:
+        _WORKFLOW_STATES[state.jira_issue_key] = state
 
     return {
         "status": state.status.value,
+        "trace_id": state.trace_id,
+        "incident_id": state.jira_issue_key or "N/A",
         "jira_issue_key": state.jira_issue_key,
         "prediction": (
             {
@@ -243,7 +263,28 @@ def api_diagnose(req: TicketDraftRequest) -> dict[str, Any]:
 @router.post("/api/v1/jira/approve")
 def api_jira_approve(req: ApproveRejectRequest) -> dict[str, Any]:
     """Grant explicit human approval for a pending remediation request."""
-    _, _, _, _, jira = get_services()
+    _, _, _, workflow, jira = get_services()
+
+    state = _WORKFLOW_STATES.get(req.jira_issue_key)
+    if state is not None and state.status == WorkflowStatus.AWAITING_APPROVAL:
+        state = workflow.approve(state, approved_by=req.approved_by)
+        state = workflow.run_state(state)
+        _WORKFLOW_STATES[req.jira_issue_key] = state
+        return {
+            "message": f"Approval granted for issue {req.jira_issue_key} by {req.approved_by}.",
+            "issue_key": req.jira_issue_key,
+            "status": state.status.value,
+            "trace_id": state.trace_id,
+            "incident_id": state.jira_issue_key,
+            "history": [
+                {
+                    "from_status": t.from_status.value,
+                    "to_status": t.to_status.value,
+                    "summary": t.summary,
+                }
+                for t in state.history
+            ],
+        }
 
     issue = jira.get_issue(req.jira_issue_key)
     if not issue:
@@ -252,6 +293,7 @@ def api_jira_approve(req: ApproveRejectRequest) -> dict[str, Any]:
             detail=f"Jira issue '{req.jira_issue_key}' not found.",
         )
 
+    jira.add_comment(req.jira_issue_key, f"Approval granted by {req.approved_by}")
     return {
         "message": f"Approval granted for issue {req.jira_issue_key} by {req.approved_by}.",
         "issue_key": req.jira_issue_key,
@@ -262,7 +304,28 @@ def api_jira_approve(req: ApproveRejectRequest) -> dict[str, Any]:
 @router.post("/api/v1/jira/reject")
 def api_jira_reject(req: ApproveRejectRequest) -> dict[str, Any]:
     """Reject a pending remediation request and escalate the ticket."""
-    _, _, _, _, jira = get_services()
+    _, _, _, workflow, jira = get_services()
+
+    state = _WORKFLOW_STATES.get(req.jira_issue_key)
+    if state is not None and state.status == WorkflowStatus.AWAITING_APPROVAL:
+        state = workflow.reject(state, approved_by=req.approved_by)
+        state = workflow.run_state(state)
+        _WORKFLOW_STATES[req.jira_issue_key] = state
+        return {
+            "message": f"Approval rejected for issue {req.jira_issue_key} by {req.approved_by}.",
+            "issue_key": req.jira_issue_key,
+            "status": state.status.value,
+            "trace_id": state.trace_id,
+            "incident_id": state.jira_issue_key,
+            "history": [
+                {
+                    "from_status": t.from_status.value,
+                    "to_status": t.to_status.value,
+                    "summary": t.summary,
+                }
+                for t in state.history
+            ],
+        }
 
     issue = jira.get_issue(req.jira_issue_key)
     if not issue:
@@ -271,6 +334,7 @@ def api_jira_reject(req: ApproveRejectRequest) -> dict[str, Any]:
             detail=f"Jira issue '{req.jira_issue_key}' not found.",
         )
 
+    jira.add_comment(req.jira_issue_key, f"Approval rejected by {req.approved_by}")
     return {
         "message": f"Approval rejected for issue {req.jira_issue_key} by {req.approved_by}.",
         "issue_key": req.jira_issue_key,
@@ -288,3 +352,4 @@ def api_audit_logs() -> dict[str, Any]:
         "total_events": len(events),
         "events": [ev.model_dump(mode="json") for ev in events],
     }
+
