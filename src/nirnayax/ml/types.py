@@ -11,8 +11,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-#: The three prediction heads, in a stable order.
-TARGETS: tuple[str, ...] = ("category", "subcategory", "priority")
+#: The prediction heads, in a stable order.
+TARGETS: tuple[str, ...] = ("category", "subcategory", "urgency", "impact", "priority")
 
 
 class _Frozen(BaseModel):
@@ -30,17 +30,18 @@ class FeatureConfig(_Frozen):
     ngram_max: int = Field(default=2, ge=1, le=3)
     min_df: int = Field(default=2, ge=1)
     max_df: float = Field(default=0.9, gt=0.0, le=1.0)
+    max_features: int | None = Field(default=25000, ge=100)
     sublinear_tf: bool = True
     use_stopwords: bool = True
     include_metadata: bool = True
 
 
 class TrainingConfig(_Frozen):
-    """Reproducible training hyper-parameters for all three heads."""
+    """Reproducible training hyper-parameters for all heads."""
 
     seed: int = 20260901
     C: float = Field(default=4.0, gt=0.0)
-    max_iter: int = Field(default=2000, ge=1)
+    max_iter: int = Field(default=100, ge=1)
     #: ``None`` keeps predicted probabilities well calibrated; ``"balanced"``
     #: trades calibration for recall on rare classes.
     class_weight: str | None = None
@@ -72,6 +73,8 @@ class TriagePrediction(_Frozen):
 
     category: ClassPrediction
     subcategory: ClassPrediction
+    urgency: ClassPrediction | None = None
+    impact: ClassPrediction | None = None
     priority: ClassPrediction
     #: True when the predicted subcategory's parent equals the predicted category.
     taxonomy_consistent: bool
@@ -79,9 +82,13 @@ class TriagePrediction(_Frozen):
 
     def render(self) -> str:
         flag = "" if self.taxonomy_consistent else "  [!] subcategory/category mismatch"
+        urg_str = f"\nurgency     : {self.urgency.render()}" if self.urgency else ""
+        imp_str = f"\nimpact      : {self.impact.render()}" if self.impact else ""
         return (
             f"category    : {self.category.render()}\n"
-            f"subcategory : {self.subcategory.render()}\n"
+            f"subcategory : {self.subcategory.render()}"
+            f"{urg_str}"
+            f"{imp_str}\n"
             f"priority    : {self.priority.render()}\n"
             f"consistent  : {self.taxonomy_consistent}{flag}"
         )

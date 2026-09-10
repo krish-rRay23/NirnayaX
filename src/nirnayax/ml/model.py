@@ -20,7 +20,7 @@ import joblib
 from ..domain.models import Incident
 from ..domain.taxonomy import Subcategory, category_of
 from .features import TicketDraft, text_from_draft, text_from_incident
-from .types import TARGETS, ClassPrediction, ModelMetadata, TriagePrediction
+from .types import ClassPrediction, ModelMetadata, TriagePrediction
 
 
 def _class_prediction(classes: Sequence[str], proba_row: Sequence[float]) -> ClassPrediction:
@@ -39,9 +39,11 @@ def _taxonomy_consistent(subcategory_label: str, category_label: str) -> bool:
     """True if the predicted subcategory's parent category matches the prediction."""
 
     try:
-        return category_of(Subcategory(subcategory_label)).value == category_label
+        sub_enum = Subcategory(subcategory_label)
+        cat_enum = category_of(sub_enum)
+        return cat_enum.value == category_label
     except ValueError:
-        return False
+        return True
 
 
 class TriageModel:
@@ -54,7 +56,8 @@ class TriageModel:
         classifiers: dict[str, Any],
         metadata: ModelMetadata,
     ) -> None:
-        missing = [t for t in TARGETS if t not in classifiers]
+        mandatory = ["category", "subcategory", "priority"]
+        missing = [t for t in mandatory if t not in classifiers]
         if missing:
             raise ValueError(f"missing classifier head(s): {missing}")
         self._vectorizer = vectorizer
@@ -74,7 +77,7 @@ class TriageModel:
     def _predict_text(self, text: str) -> TriagePrediction:
         matrix = self._vectorizer.transform([text])
         heads: dict[str, ClassPrediction] = {}
-        for target in TARGETS:
+        for target in self._classifiers:
             clf = self._classifiers[target]
             classes = [str(c) for c in clf.classes_]
             proba_row = clf.predict_proba(matrix)[0]
@@ -85,6 +88,8 @@ class TriageModel:
         return TriagePrediction(
             category=category,
             subcategory=subcategory,
+            urgency=heads.get("urgency"),
+            impact=heads.get("impact"),
             priority=heads["priority"],
             taxonomy_consistent=_taxonomy_consistent(subcategory.label, category.label),
             model_version=self.metadata.model_version,
@@ -113,7 +118,7 @@ class TriageModel:
         texts = [text_from_incident(inc, config) for inc in incidents]
         matrix = self._vectorizer.transform(texts)
         scores: dict[str, tuple[list[str], Any]] = {}
-        for target in TARGETS:
+        for target in self._classifiers:
             clf = self._classifiers[target]
             classes = [str(c) for c in clf.classes_]
             scores[target] = (classes, clf.predict_proba(matrix))
