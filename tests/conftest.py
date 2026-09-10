@@ -10,25 +10,46 @@ from __future__ import annotations
 
 import pytest
 
-from nirnayax.data import build_runbooks, generate_dataset
+from nirnayax.data import build_runbooks, load_dataset
 from nirnayax.domain import DatasetSplit
 from nirnayax.domain.models import IncidentDataset, Runbook
 from nirnayax.ml import TicketDraft, TriageModel, train_triage_model
 from nirnayax.retrieval import HybridRetriever, build_incident_retriever, build_runbook_retriever
 
-#: Kept modest so the suite stays fast while still covering every label.
-TRAIN_SIZE = 400
-EVAL_SIZE = 150
+
+@pytest.fixture(scope="session")
+def full_dataset() -> IncidentDataset:
+    return load_dataset("data/all_tickets.csv")
 
 
 @pytest.fixture(scope="session")
-def train_dataset() -> IncidentDataset:
-    return generate_dataset(TRAIN_SIZE, split=DatasetSplit.TRAIN)
+def train_dataset(full_dataset: IncidentDataset) -> IncidentDataset:
+    incidents = full_dataset.incidents[:2000]
+    from nirnayax.domain.models import DatasetMetadata
+    meta = DatasetMetadata(
+        name="train_slice",
+        split=DatasetSplit.TRAIN,
+        seed=20260901,
+        size=len(incidents),
+        generated_at=full_dataset.metadata.generated_at,
+        generator_version=full_dataset.metadata.generator_version,
+    )
+    return IncidentDataset(metadata=meta, incidents=incidents)
 
 
 @pytest.fixture(scope="session")
-def eval_dataset() -> IncidentDataset:
-    return generate_dataset(EVAL_SIZE, split=DatasetSplit.EVAL)
+def eval_dataset(full_dataset: IncidentDataset) -> IncidentDataset:
+    incidents = full_dataset.incidents[2000:2500]
+    from nirnayax.domain.models import DatasetMetadata
+    meta = DatasetMetadata(
+        name="eval_slice",
+        split=DatasetSplit.EVAL,
+        seed=20260901,
+        size=len(incidents),
+        generated_at=full_dataset.metadata.generated_at,
+        generator_version=full_dataset.metadata.generator_version,
+    )
+    return IncidentDataset(metadata=meta, incidents=incidents)
 
 
 @pytest.fixture(scope="session")
