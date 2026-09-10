@@ -32,9 +32,10 @@ This document provides a detailed technical description of the **NirnayaX** ente
             v                       v                       v
 +----------------------+ +--------------------+ +-----------------------+
 |   ML Triage Engine   | | Hybrid RAG Engine  | | MCP Jira Sync Adapter |
-|  - Category          | | - BM25 Lexical     | | - Issue Creation      |
-|  - Subcategory       | | - Vector Cosine    | | - RAG Evidence Sync |
-|  - Priority          | | - RRF Fusion       | | - Status Transitions  |
+|  - Category (5 dom)  | | - BM25 Lexical     | | - Issue Creation      |
+|  - Subcategory (59)  | | - Vector Cosine    | | - RAG Evidence Sync |
+|  - Urgency & Impact  | | - RRF Fusion       | | - Status Transitions  |
+|  - Priority (P1..P4) | | - Metadata Filter | | - Approval Sync       |
 +----------------------+ +--------------------+ +-----------------------+
 ```
 
@@ -68,3 +69,20 @@ This document provides a detailed technical description of the **NirnayaX** ente
 
 3. **Fail-Closed Safety Design**:
    - Any prompt injection attempt, unallowlisted tool invocation, low-confidence prediction, or prohibited Jira auto-close immediately triggers a fail-closed transition to `ESCALATED`.
+
+---
+
+## ML Engine Architecture & Taxonomy Mapping
+
+1. **Single Source of Truth**:
+   - `data/all_tickets.csv` is the ONLY canonical ML dataset. All synthetic datasets (`incidents_train.json`, `incidents_eval.json`) have been removed.
+
+2. **Feature Extraction**:
+   - Uses `title` + `body` combined text. No downstream tags, resolution notes, or diagnostic logs are used during feature extraction, preventing data leakage.
+
+3. **Multi-Head Classifiers**:
+   - 5 independent target heads fitted on a shared TF-IDF feature matrix: `category` (13 raw classes), `subcategory` (59 raw classes), `urgency` (4 levels), `impact` (5 levels), and `priority` (4 levels P1..P4).
+
+4. **Native Dataset Taxonomy**:
+   - Target classes evaluate the dataset's native anonymized raw integer labels (`category` 0..12, `sub_category1` 0..58) directly without unbacked heuristic mappings. NirnayaX's intended product taxonomy (`Category.NETWORK`, `Category.APPLICATION_DB`, `Category.BILLING_OSS`, `Category.HARDWARE_ACCESS`) remains intact for domain models, runbooks, and RAG retrieval.
+

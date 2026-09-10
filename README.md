@@ -67,9 +67,8 @@ docker compose up --build
 | `nirnayax demo` | Run deterministic end-to-end L1 incident triage, diagnosis, Jira sync, and human approval demo. |
 | `nirnayax guardrail-demo` | Demo PII redaction, prompt injection detection, fail-closed escalation, and audit logging. |
 | `nirnayax jira-demo` | Demo Jira ticket lifecycle, comment sync, and human-in-the-loop approval. |
-| `nirnayax evaluate-e2e` | Run comprehensive quantitative evaluation across ML, RAG, workflow, and latency benchmarks. |
-| `nirnayax generate` | Generate train and eval incident datasets with EDA summary. |
-| `nirnayax train` | Train the ML triage model and persist artifacts. |
+| `nirnayax evaluate-e2e` | Run quantitative evaluation across ML, RAG, workflow, and latency benchmarks. |
+| `nirnayax train` | Train the ML triage model on canonical `data/all_tickets.csv` and persist model artifacts. |
 | `nirnayax predict` | Run ML triage prediction on a single ticket draft. |
 | `nirnayax retrieve` | Run hybrid RAG search over runbook knowledge base. |
 
