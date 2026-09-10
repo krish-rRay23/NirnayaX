@@ -72,7 +72,7 @@ def get_services() -> tuple[TriageModel, Any, Any, DiagnosisWorkflow, Any]:
             }
         )
 
-        min_conf = float(os.getenv("NIRNAYAX_MIN_CONFIDENCE_THRESHOLD", "0.20"))
+        min_conf = float(os.getenv("NIRNAYAX_MIN_CONFIDENCE_THRESHOLD", "0.15"))
         _WORKFLOW = DiagnosisWorkflow(
             model=_MODEL,
             runbook_retriever=_RUNBOOK_RETRIEVER,
@@ -84,7 +84,7 @@ def get_services() -> tuple[TriageModel, Any, Any, DiagnosisWorkflow, Any]:
         )
 
     _WORKFLOW.min_confidence_threshold = float(
-        os.getenv("NIRNAYAX_MIN_CONFIDENCE_THRESHOLD", "0.20")
+        os.getenv("NIRNAYAX_MIN_CONFIDENCE_THRESHOLD", "0.15")
     )
     return _MODEL, _RUNBOOK_RETRIEVER, _INCIDENT_RETRIEVER, _WORKFLOW, _JIRA_ADAPTER
 
