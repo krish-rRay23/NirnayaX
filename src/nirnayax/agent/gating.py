@@ -37,22 +37,31 @@ def evaluate_confidence_gate(
     if not prediction.taxonomy_consistent:
         ml_conf *= 0.5
         reasons.append("Taxonomy inconsistency between category and subcategory.")
-    if ml_conf < 0.40:
+    min_floor = min(0.25, min_threshold)
+    if ml_conf < min_floor:
         reasons.append(f"ML triage confidence too low ({ml_conf:.1%}).")
 
     # 2. Runbook match evidence
     matching_runbook = None
     runbook_score = 0.0
+
     if retrieved_runbooks:
         top_rb = retrieved_runbooks[0]
-        if top_rb.chunk.metadata.get("subcategory") == ml_subcat:
+        rb_sub = top_rb.chunk.metadata.get("subcategory")
+        rb_cat = top_rb.chunk.metadata.get("category")
+        from ..domain.taxonomy import all_subcategories
+        domain_subs = {s.value for s in all_subcategories()}
+        is_raw_sub = ml_subcat not in domain_subs
+        if (
+            rb_sub == ml_subcat
+            or rb_cat == prediction.category.label
+            or (is_raw_sub and top_rb.score >= 0.20)
+        ):
             matching_runbook = top_rb
-            # Map RRF / rerank score to normalized 0..1 scale
             runbook_score = min(1.0, max(0.5, top_rb.score * 3.0))
         else:
             reasons.append(
-                f"Top runbook ({top_rb.chunk.metadata.get('subcategory')}) "
-                f"does not match predicted subcategory ({ml_subcat})."
+                f"Top runbook ({rb_sub}) does not match predicted subcategory ({ml_subcat})."
             )
     else:
         reasons.append("No relevant runbook retrieved.")
@@ -61,7 +70,9 @@ def evaluate_confidence_gate(
     incident_match_ratio = 0.0
     if similar_incidents:
         matches = sum(
-            1 for inc in similar_incidents[:3] if inc.chunk.metadata.get("subcategory") == ml_subcat
+            1 for inc in similar_incidents[:3]
+            if inc.chunk.metadata.get("subcategory") == ml_subcat
+            or inc.chunk.metadata.get("category") == prediction.category.label
         )
         incident_match_ratio = matches / min(3, len(similar_incidents))
     else:
@@ -83,7 +94,7 @@ def evaluate_confidence_gate(
     # Gate decision rule
     can_remediate = (
         composite_score >= min_threshold
-        and ml_conf >= 0.40
+        and ml_conf >= min_floor
         and matching_runbook is not None
         and diagnostic_confirmed
     )

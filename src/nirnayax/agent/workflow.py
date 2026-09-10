@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime
 
 from ..guardrails import AuditEventStatus, AuditLogger, GuardrailEngine
@@ -125,12 +126,12 @@ class DiagnosisWorkflow:
         return state
 
     def _step_new(self, state: WorkflowState) -> WorkflowState:
-        # Validate input via GuardrailEngine
         eval_result = self.guardrail_engine.validate_input(state.draft)
+        trace_id = state.trace_id or eval_result.trace_id or f"TRC-{uuid.uuid4().hex[:8]}"
 
         if not eval_result.allowed:
             self.audit_logger.log_event(
-                trace_id=eval_result.trace_id,
+                trace_id=trace_id,
                 incident_id=state.jira_issue_key or "N/A",
                 actor="GuardrailEngine",
                 decision="BLOCKED",
@@ -167,6 +168,7 @@ class DiagnosisWorkflow:
             )
             return state.copy_with(
                 status=next_status,
+                trace_id=trace_id,
                 jira_issue_key=jira_key,
                 history=(*state.history, transition),
             )
@@ -191,6 +193,16 @@ class DiagnosisWorkflow:
             )
             self.jira_adapter.transition_issue(jira_key, JiraIssueStatus.IN_PROGRESS.value)
 
+        self.audit_logger.log_event(
+            trace_id=trace_id,
+            incident_id=jira_key or "N/A",
+            actor="TriageModel",
+            decision="PREDICTED",
+            confidence=prediction.subcategory.confidence,
+            tool_action="predict",
+            status=AuditEventStatus.ALLOWED,
+        )
+
         next_status = WorkflowStatus.TRIAGED
         summary = (
             f"ML triage predicted category={prediction.category.label}, "
@@ -204,6 +216,7 @@ class DiagnosisWorkflow:
         )
         return state.copy_with(
             status=next_status,
+            trace_id=trace_id,
             draft=sanitized_draft,
             prediction=prediction,
             jira_issue_key=jira_key,
@@ -213,7 +226,8 @@ class DiagnosisWorkflow:
     def _step_triaged(self, state: WorkflowState) -> WorkflowState:
         query = f"{state.draft.title}\n{state.draft.description}"
         filters = {}
-        if state.prediction:
+        domain_cats = ("NETWORK", "APPLICATION_DB", "BILLING_OSS", "HARDWARE_ACCESS")
+        if state.prediction and state.prediction.category.label in domain_cats:
             filters["category"] = state.prediction.category.label
 
         runbooks = tuple(self.runbook_retriever.retrieve(query, k=3, filters=filters or None))
@@ -226,6 +240,17 @@ class DiagnosisWorkflow:
                 f"- Similar incidents correlated: {len(incidents)}"
             )
             self.jira_adapter.add_comment(state.jira_issue_key, msg)
+
+        self.audit_logger.log_event(
+            trace_id=state.trace_id or "N/A",
+            incident_id=state.jira_issue_key or "N/A",
+            actor="HybridRetriever",
+            decision="RETRIEVED",
+            confidence=1.0,
+            evidence=[f"runbooks:{len(runbooks)}", f"incidents:{len(incidents)}"],
+            tool_action="retrieve_evidence",
+            status=AuditEventStatus.ALLOWED,
+        )
 
         next_status = WorkflowStatus.CORRELATED
         summary = (
@@ -256,6 +281,16 @@ class DiagnosisWorkflow:
             msg = "Diagnostic Observations:\n" + "\n".join(o.render() for o in observations)
             self.jira_adapter.add_comment(state.jira_issue_key, msg)
 
+        self.audit_logger.log_event(
+            trace_id=state.trace_id or "N/A",
+            incident_id=state.jira_issue_key or "N/A",
+            actor="MetricsMonitor",
+            decision="OBSERVED",
+            confidence=1.0,
+            tool_action="check_service_metrics",
+            status=AuditEventStatus.ALLOWED,
+        )
+
         next_status = WorkflowStatus.DIAGNOSING
         summary = f"Observed {len(observations)} diagnostic metrics/logs for service {service}."
         transition = WorkflowTransition(
@@ -284,6 +319,17 @@ class DiagnosisWorkflow:
                 state.jira_issue_key, f"Gating Evaluation:\n{outcome.render()}"
             )
 
+        self.audit_logger.log_event(
+            trace_id=state.trace_id or "N/A",
+            incident_id=state.jira_issue_key or "N/A",
+            actor="ConfidenceGate",
+            decision=outcome.decision.value,
+            confidence=outcome.confidence_score,
+            evidence=[outcome.reasoning],
+            tool_action="evaluate_confidence_gate",
+            status=AuditEventStatus.ALLOWED,
+        )
+
         next_status = WorkflowStatus.DECISION
         summary = (
             f"Confidence gate evaluated: {outcome.decision.value} "
@@ -304,7 +350,15 @@ class DiagnosisWorkflow:
     def _step_decision(self, state: WorkflowState) -> WorkflowState:
         if state.decision and state.decision.decision == DecisionType.REMEDIATE:
             proposed_action = state.decision.suggested_action or "execute_remediation"
-            subcat = state.prediction.subcategory.label if state.prediction else "UNKNOWN"
+            rb_sub = (
+                state.retrieved_runbooks[0].chunk.metadata.get("subcategory")
+                if state.retrieved_runbooks
+                else None
+            )
+            if rb_sub:
+                subcat = str(rb_sub)
+            elif state.prediction:
+                subcat = state.prediction.subcategory.label
             sev = state.prediction.priority.label if state.prediction else "SEV2"
 
             app_req = create_approval_request(
@@ -418,14 +472,24 @@ class DiagnosisWorkflow:
 
     def _step_remediation(self, state: WorkflowState) -> WorkflowState:
         service = state.draft.affected_service or "default-service"
-        subcat = state.prediction.subcategory.label if state.prediction else "UNKNOWN"
+        rb_sub = (
+            state.retrieved_runbooks[0].chunk.metadata.get("subcategory")
+            if state.retrieved_runbooks
+            else None
+        )
+        if rb_sub:
+            subcat = str(rb_sub)
+        elif state.approval_request and state.approval_request.subcategory:
+            subcat = state.approval_request.subcategory
+        elif state.prediction:
+            subcat = state.prediction.subcategory.label
 
         tool_check = self.guardrail_engine.validate_tool_call(
             "execute_remediation", {"action": subcat, "service": service}
         )
         if not tool_check.passed:
             self.audit_logger.log_event(
-                trace_id="TRC-REMEDIATION-FAIL",
+                trace_id=state.trace_id or "N/A",
                 incident_id=state.jira_issue_key or "N/A",
                 actor="GuardrailEngine",
                 decision="BLOCKED",
@@ -455,6 +519,16 @@ class DiagnosisWorkflow:
             )
 
         action = execute_remediation(self.env, service, subcat)
+
+        self.audit_logger.log_event(
+            trace_id=state.trace_id or "N/A",
+            incident_id=state.jira_issue_key or "N/A",
+            actor="RemediationExecutor",
+            decision="EXECUTED",
+            confidence=1.0,
+            tool_action=f"execute_remediation:{subcat}",
+            status=AuditEventStatus.ALLOWED,
+        )
 
         if self.jira_adapter is not None and state.jira_issue_key:
             self.jira_adapter.add_comment(
@@ -499,7 +573,7 @@ class DiagnosisWorkflow:
 
             if not jira_check.passed:
                 self.audit_logger.log_event(
-                    trace_id="TRC-JIRA-SAFE-FAIL",
+                    trace_id=state.trace_id or "N/A",
                     incident_id=state.jira_issue_key or "N/A",
                     actor="GuardrailEngine",
                     decision="BLOCKED",
@@ -528,6 +602,16 @@ class DiagnosisWorkflow:
                     history=(*state.history, transition),
                 )
 
+            self.audit_logger.log_event(
+                trace_id=state.trace_id or "N/A",
+                incident_id=state.jira_issue_key or "N/A",
+                actor="RecoveryVerifier",
+                decision="PASSED",
+                confidence=1.0,
+                tool_action="verify_service_recovery",
+                status=AuditEventStatus.ALLOWED,
+            )
+
             next_status = WorkflowStatus.RESOLVED
             summary = f"Verification passed on {service}. Incident resolved."
             if self.jira_adapter is not None and state.jira_issue_key:
@@ -539,6 +623,16 @@ class DiagnosisWorkflow:
                     state.jira_issue_key, JiraIssueStatus.RESOLVED.value
                 )
         else:
+            self.audit_logger.log_event(
+                trace_id=state.trace_id or "N/A",
+                incident_id=state.jira_issue_key or "N/A",
+                actor="RecoveryVerifier",
+                decision="FAILED",
+                confidence=0.0,
+                tool_action="verify_service_recovery",
+                status=AuditEventStatus.BLOCKED,
+            )
+
             next_status = WorkflowStatus.ESCALATED
             summary = f"Verification failed on {service}. Escalating incident to L2."
             if self.jira_adapter is not None and state.jira_issue_key:
@@ -565,6 +659,16 @@ class DiagnosisWorkflow:
     def _step_escalation(self, state: WorkflowState) -> WorkflowState:
         next_status = WorkflowStatus.ESCALATED
         summary = "Ticket officially escalated to on-call engineering team."
+
+        self.audit_logger.log_event(
+            trace_id=state.trace_id or "N/A",
+            incident_id=state.jira_issue_key or "N/A",
+            actor="DiagnosisWorkflow",
+            decision="ESCALATED",
+            confidence=0.0,
+            tool_action="escalate",
+            status=AuditEventStatus.ALLOWED,
+        )
 
         if self.jira_adapter is not None and state.jira_issue_key:
             self.jira_adapter.transition_issue(

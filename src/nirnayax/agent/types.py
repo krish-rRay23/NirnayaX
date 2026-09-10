@@ -105,6 +105,7 @@ class WorkflowState(_Frozen):
 
     draft: TicketDraft
     status: WorkflowStatus = WorkflowStatus.NEW
+    trace_id: str | None = None
     prediction: TriagePrediction | None = None
     retrieved_runbooks: tuple[RetrievalResult, ...] = ()
     similar_incidents: tuple[RetrievalResult, ...] = ()
