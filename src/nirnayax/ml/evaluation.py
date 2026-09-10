@@ -12,9 +12,9 @@ from typing import Any
 
 from sklearn.metrics import classification_report, confusion_matrix
 
-from ..domain.models import IncidentDataset
+from ..domain.models import Incident, IncidentDataset
 from .model import TriageModel
-from .types import TARGETS, ClassMetrics, EvaluationReport, TargetMetrics
+from .types import ClassMetrics, EvaluationReport, TargetMetrics
 
 
 def expected_calibration_error(
@@ -91,14 +91,27 @@ def evaluate_model(model: TriageModel, dataset: IncidentDataset) -> EvaluationRe
         raise ValueError("cannot evaluate on an empty dataset")
 
     scores = model.score_incidents(incidents)
+
+    def _extract_tag_val(inc: Incident, prefix: str, default: str) -> str:
+        for tag in inc.tags:
+            if tag.startswith(prefix):
+                return tag[len(prefix) :]
+        return default
+
     truth: dict[str, list[str]] = {
-        "category": [inc.category.value for inc in incidents],
-        "subcategory": [inc.subcategory.value for inc in incidents],
+        "category": [_extract_tag_val(inc, "raw_cat:", inc.category.value) for inc in incidents],
+        "subcategory": [
+            _extract_tag_val(inc, "raw_sub1:", inc.subcategory.value) for inc in incidents
+        ],
+        "urgency": [_extract_tag_val(inc, "urgency_", "3") for inc in incidents],
+        "impact": [_extract_tag_val(inc, "impact_", "4") for inc in incidents],
         "priority": [inc.priority.value for inc in incidents],
     }
 
     targets = {
-        target: _target_metrics(target, truth[target], *scores[target]) for target in TARGETS
+        target: _target_metrics(target, truth[target], *scores[target])
+        for target in scores
+        if target in truth
     }
     return EvaluationReport(
         model_version=model.model_version,

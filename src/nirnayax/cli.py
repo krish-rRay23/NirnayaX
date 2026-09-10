@@ -40,8 +40,8 @@ _DEFAULT_OUT = Path("data")
 _DEFAULT_TRAIN_SIZE = 600
 _DEFAULT_EVAL_SIZE = 200
 _DEFAULT_MODEL = Path("models/triage.joblib")
-_DEFAULT_TRAIN_DATA = Path("data/incidents_train.json")
-_DEFAULT_EVAL_DATA = Path("data/incidents_eval.json")
+_DEFAULT_TRAIN_DATA = Path("data/all_tickets.csv")
+_DEFAULT_EVAL_DATA = Path("data/all_tickets.csv")
 
 
 def _cmd_generate(args: argparse.Namespace) -> int:

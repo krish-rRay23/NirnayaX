@@ -11,13 +11,14 @@ import hashlib
 import platform
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
+from typing import Any
 
 import numpy
 import sklearn
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 
-from ..domain.models import IncidentDataset
+from ..domain.models import Incident, IncidentDataset
 from .features import text_from_incident
 from .model import TriageModel
 from .types import TARGETS, ModelMetadata, TrainingConfig
@@ -59,9 +60,20 @@ def train_triage_model(
 
     features = config.features
     texts = [text_from_incident(inc, features) for inc in incidents]
+
+    def _extract_tag_val(inc: Incident, prefix: str, default: str) -> str:
+        for tag in inc.tags:
+            if tag.startswith(prefix):
+                return tag[len(prefix) :]
+        return default
+
     labels: dict[str, list[str]] = {
-        "category": [inc.category.value for inc in incidents],
-        "subcategory": [inc.subcategory.value for inc in incidents],
+        "category": [_extract_tag_val(inc, "raw_cat:", inc.category.value) for inc in incidents],
+        "subcategory": [
+            _extract_tag_val(inc, "raw_sub1:", inc.subcategory.value) for inc in incidents
+        ],
+        "urgency": [_extract_tag_val(inc, "urgency_", "3") for inc in incidents],
+        "impact": [_extract_tag_val(inc, "impact_", "4") for inc in incidents],
         "priority": [inc.priority.value for inc in incidents],
     }
 
@@ -71,21 +83,28 @@ def train_triage_model(
         ngram_range=(1, features.ngram_max),
         min_df=features.min_df,
         max_df=features.max_df,
+        max_features=features.max_features,
         sublinear_tf=features.sublinear_tf,
         stop_words="english" if features.use_stopwords else None,
     )
     matrix = vectorizer.fit_transform(texts)
 
-    classifiers: dict[str, LogisticRegression] = {}
+    from sklearn.dummy import DummyClassifier
+
+    classifiers: dict[str, Any] = {}
     label_space: dict[str, tuple[str, ...]] = {}
     for target in TARGETS:
-        clf = LogisticRegression(
-            C=config.C,
-            max_iter=config.max_iter,
-            class_weight=config.class_weight,
-            solver="lbfgs",
-            random_state=config.seed,
-        )
+        unique_labels = set(labels[target])
+        if len(unique_labels) < 2:
+            clf: Any = DummyClassifier(strategy="most_frequent")
+        else:
+            clf = LogisticRegression(
+                C=config.C,
+                max_iter=config.max_iter,
+                class_weight=config.class_weight,
+                solver="lbfgs",
+                random_state=config.seed,
+            )
         clf.fit(matrix, labels[target])
         classifiers[target] = clf
         label_space[target] = tuple(str(c) for c in clf.classes_)
